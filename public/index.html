@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lipia STK Push Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+
+    <div class="bg-white p-8 rounded-lg shadow-md w-96">
+        <h1 class="text-2xl font-bold mb-6 text-center text-green-600">M-Pesa Payment</h1>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium">Phone Number</label>
+                <input type="text" id="phone" placeholder="2547XXXXXXXX" class="w-full p-2 border rounded mt-1">
+            </div>
+            <div>
+                <label class="block text-sm font-medium">Amount (KES)</label>
+                <input type="number" id="amount" value="1" class="w-full p-2 border rounded mt-1">
+            </div>
+            <button onclick="pay()" id="payBtn" class="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600 font-bold transition">
+                PUSH STK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        async function pay() {
+            const phone = document.getElementById('phone').value;
+            const amount = document.getElementById('amount').value;
+            const btn = document.getElementById('payBtn');
+
+            if(!phone) return alert("Enter phone");
+
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+
+            try {
+                const response = await fetch('/api/stk-push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, amount })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire('STK Sent', 'Please enter your PIN on your phone', 'info');
+                    checkStatus(result.transactionReference);
+                } else {
+                    Swal.fire('Error', result.message, 'error');
+                    btn.disabled = false;
+                    btn.innerText = "PUSH STK";
+                }
+            } catch (err) {
+                Swal.fire('Error', 'Server error', 'error');
+                btn.disabled = false;
+            }
+        }
+
+        async function checkStatus(ref) {
+            const interval = setInterval(async () => {
+                const res = await fetch(`/api/status/${ref}`);
+                const data = await res.json();
+
+                console.log('Polling status for ' + ref + ': ' + data.status);
+
+                if (data.status === 'completed') {
+                    clearInterval(interval);
+                    
+                    // Celebration!
+                    confetti({
+                        particleCount: 150,
+                        spread: 70,
+                        origin: { y: 0.6 }
+                    });
+
+                    Swal.fire({
+                        title: 'Payment Successful!',
+                        text: 'We received your payment successfully.',
+                        icon: 'success',
+                        confirmButtonText: 'Great!'
+                    });
+
+                    document.getElementById('payBtn').disabled = false;
+                    document.getElementById('payBtn').innerText = "PUSH STK";
+                } else if (data.status === 'failed') {
+                    clearInterval(interval);
+                    Swal.fire('Failed', 'Payment was cancelled or failed', 'error');
+                    document.getElementById('payBtn').disabled = false;
+                }
+            }, 3000); // Check every 3 seconds
+        }
+    </script>
+</body>
+</html>
